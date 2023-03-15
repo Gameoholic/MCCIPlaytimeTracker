@@ -2,6 +2,6 @@
 
 
 Tracks your playtime on MCCI.
-Disclaime: The code is very scuffed lol
+Disclaimer: The code is very scuffed lol
 
 Only works on Forge and Fabric.

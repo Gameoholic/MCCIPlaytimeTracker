@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -44,6 +45,7 @@ namespace MinecraftLogProgram
             string joinMessageHeader = "[Render thread/INFO] [net.minecraft.client.gui.screens.ConnectScreen/]: ";
             string leaveMessageHeader = "[Render thread/INFO] [net.minecraft.client.renderer.texture.TextureAtlas/]: ";
 
+            int errors = 0;
 
 
             foreach (string filePath in filePaths)
@@ -52,135 +54,149 @@ namespace MinecraftLogProgram
                 DateTime serverJoinTime = DateTime.MinValue;
                 string lastDateString = "";
                 
-                using (FileStream fileStream = new FileStream(filePath, FileMode.Open))
-                using (GZipStream gzipStream = new GZipStream(fileStream, CompressionMode.Decompress))
-                using (StreamReader reader = new StreamReader(gzipStream))
+                try
                 {
-                    string line;
-                    while ((line = reader.ReadLine()) != null)
+                    using (FileStream fileStream = new FileStream(filePath, FileMode.Open))
+                    using (GZipStream gzipStream = new GZipStream(fileStream, CompressionMode.Decompress))
+                    using (StreamReader reader = new StreamReader(gzipStream))
                     {
-
-                        // Extract date and text
-                        Match match = Regex.Match(line, @"\[(.+?)\] (.+)");
-                        if (!match.Success)
+                        string line;
+                        Console.WriteLine($"Scanning {filePath}");
+                        while ((line = reader.ReadLine()) != null)
                         {
-                            continue;
-                        }
-                        string dateString = match.Groups[1].Value;
-                        string text = match.Groups[2].Value;
-                        lastDateString = dateString;
-
-                        if (text.StartsWith("[main/INFO]: Loading Minecraft") && text.Contains("Fabric"))
-                        {
-                            isFabric = true;
-                            joinMessageHeader = "[Render thread/INFO]: ";
-                            leaveMessageHeader = "[Render thread/INFO]: ";
-                        }
-
-
-
-                        // Check if connected to server
-                        if (text.Equals(joinMessageHeader + "Connecting to play.mccisland.net, 25565") || 
-                            text.Equals(joinMessageHeader + "Connecting to alt.mccisland.net, 25565"))
-                        {
-                            connectedToServer = true;
-                            if (!isFabric)
-                                serverJoinTime = DateTime.ParseExact(dateString, "ddMMMyyyy HH:mm:ss.fff", null);
-                            else
-                                serverJoinTime = DateTime.ParseExact(dateString, "HH:mm:ss", null);
-                            Console.WriteLine("joined server at " + serverJoinTime);
-                            timesJoined++;
-                        }
-
-                        // Check if left server and calculate time difference
-                        if (text.Equals(leaveMessageHeader + "Created: 1024x512x4 minecraft:textures/atlas/blocks.png-atlas") &&
-                            connectedToServer)
-                        {
-                            DateTime serverLeaveTime;
-                            if (!isFabric)
-                                serverLeaveTime = DateTime.ParseExact(dateString, "ddMMMyyyy HH:mm:ss.fff", null);
-                            else
+                            // Extract date and text
+                            Match match = Regex.Match(line, @"\[(.+?)\] (.+)");
+                            if (!match.Success)
                             {
-                                serverLeaveTime = DateTime.ParseExact(dateString, "HH:mm:ss", null);
-
-                                // Extract the date from the file name
-                                string fileName = Path.GetFileName(filePath);
-                                if (!Regex.IsMatch(fileName, @"^\d{4}-\d{2}-\d{2}-\d+\.log\.gz$"))
-                                {
-                                    continue;
-                                }
-                                string dateString2 = fileName.Substring(0, 10);
-
-                                var dateStringElements = lastDateString.Split('-');
-                                DateTime fileDate = DateTime.ParseExact($"{dateStringElements[0]}-{dateStringElements[1]}-{dateStringElements[2]}",
-                                    "yyyy-MM-dd", CultureInfo.InvariantCulture);
-
-                                DateTime newDateTime = new DateTime(fileDate.Year, fileDate.Month, fileDate.Day,
-                                                                    serverLeaveTime.Hour, serverLeaveTime.Minute, serverLeaveTime.Second);
-                                serverLeaveTime = newDateTime;
-
-
+                                continue;
                             }
-                            Console.WriteLine("left server at " + serverLeaveTime);
+                            string dateString = match.Groups[1].Value;
+                            string text = match.Groups[2].Value;
+                            lastDateString = dateString;
 
-                            TimeSpan timeDiff = serverLeaveTime - serverJoinTime;
-                            seconds += Math.Abs((int)timeDiff.TotalSeconds);
+                            if (text.StartsWith("[main/INFO]: Loading Minecraft") && text.Contains("Fabric"))
+                            {
+                                isFabric = true;
+                                joinMessageHeader = "[Render thread/INFO]: ";
+                                leaveMessageHeader = "[Render thread/INFO]: ";
+                            }
 
-                            connectedToServer = false;
-                            timesLeft++;
-                        }
-                        //fix being able to farm time on another server by getting kicked before loading into the world
-                        if (text.StartsWith(joinMessageHeader + "Connecting to ") &&
-                            !text.EndsWith("play.mccisland.net, 25565") && !text.EndsWith("alt.mccisland.net, 25565"))
-                        {
-                            connectedToServer = false;
+
+
+                            // Check if connected to server
+                            if (text.Equals(joinMessageHeader + "Connecting to play.mccisland.net, 25565") ||
+                                text.Equals(joinMessageHeader + "Connecting to alt.mccisland.net, 25565"))
+                            {
+                                connectedToServer = true;
+                                if (!isFabric)
+                                    serverJoinTime = DateTime.ParseExact(dateString, "ddMMMyyyy HH:mm:ss.fff", null);
+                                else
+                                    serverJoinTime = DateTime.ParseExact(dateString, "HH:mm:ss", null);
+                                Console.WriteLine("joined server at " + serverJoinTime);
+                                timesJoined++;
+                            }
+
+                            // Check if left server and calculate time difference
+                            if (text.Equals(leaveMessageHeader + "Created: 1024x512x4 minecraft:textures/atlas/blocks.png-atlas") &&
+                                connectedToServer)
+                            {
+                                DateTime serverLeaveTime;
+                                if (!isFabric)
+                                    serverLeaveTime = DateTime.ParseExact(dateString, "ddMMMyyyy HH:mm:ss.fff", null);
+                                else
+                                {
+                                    serverLeaveTime = DateTime.ParseExact(dateString, "HH:mm:ss", null);
+
+                                    // Extract the date from the file name
+                                    string fileName = Path.GetFileName(filePath);
+                                    if (!Regex.IsMatch(fileName, @"^\d{4}-\d{2}-\d{2}-\d+\.log\.gz$"))
+                                    {
+                                        continue;
+                                    }
+                                    string dateString2 = fileName.Substring(0, 10);
+
+                                    var dateStringElements = lastDateString.Split('-');
+                                    DateTime fileDate = DateTime.ParseExact($"{dateStringElements[0]}-{dateStringElements[1]}-{dateStringElements[2]}",
+                                        "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+                                    DateTime newDateTime = new DateTime(fileDate.Year, fileDate.Month, fileDate.Day,
+                                                                        serverLeaveTime.Hour, serverLeaveTime.Minute, serverLeaveTime.Second);
+                                    serverLeaveTime = newDateTime;
+
+
+                                }
+                                Console.WriteLine("left server at " + serverLeaveTime);
+
+                                TimeSpan timeDiff = serverLeaveTime - serverJoinTime;
+                                seconds += Math.Abs((int)timeDiff.TotalSeconds);
+
+                                connectedToServer = false;
+                                timesLeft++;
+                            }
+                            //fix being able to farm time on another server by getting kicked before loading into the world
+                            if (text.StartsWith(joinMessageHeader + "Connecting to ") &&
+                                !text.EndsWith("play.mccisland.net, 25565") && !text.EndsWith("alt.mccisland.net, 25565"))
+                            {
+                                connectedToServer = false;
+                            }
                         }
                     }
-                }
 
-                if (connectedToServer)
-                {
-                    DateTime serverLeaveTime;
-
-                    if (!isFabric)
-                        serverLeaveTime = DateTime.ParseExact(lastDateString, "ddMMMyyyy HH:mm:ss.fff", null);
-                    else
+                    if (connectedToServer)
                     {
-                        serverLeaveTime = DateTime.ParseExact(lastDateString, "HH:mm:ss", null);
+                        DateTime serverLeaveTime;
 
-                        // Extract the date from the file name
-                        string fileName = Path.GetFileName(filePath);
-
-
-                        if (!fileName.EndsWith(".log.gz"))
+                        if (!isFabric)
+                            serverLeaveTime = DateTime.ParseExact(lastDateString, "ddMMMyyyy HH:mm:ss.fff", null);
+                        else
                         {
-                            continue;
+                            serverLeaveTime = DateTime.ParseExact(lastDateString, "HH:mm:ss", null);
+
+                            // Extract the date from the file name
+                            string fileName = Path.GetFileName(filePath);
+
+
+                            if (!fileName.EndsWith(".log.gz"))
+                            {
+                                continue;
+                            }
+                            string dateString2 = fileName.Substring(0, 10);
+
+
+
+                            var dateStringElements = dateString2.Split('-');
+
+                            DateTime fileDate = DateTime.ParseExact($"{dateStringElements[0]}-{dateStringElements[1]}-{dateStringElements[2]}",
+                                "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+                            DateTime newDateTime = new DateTime(fileDate.Year, fileDate.Month, fileDate.Day,
+                                                                serverLeaveTime.Hour, serverLeaveTime.Minute, serverLeaveTime.Second);
+                            //serverLeaveTime = newDateTime;
+
+
                         }
-                        string dateString2 = fileName.Substring(0, 10);
+                        Console.WriteLine("left server and quit client at " + serverLeaveTime);
 
+                        TimeSpan timeDiff = serverLeaveTime - serverJoinTime;
+                        seconds += Math.Abs((int)timeDiff.TotalSeconds);
+                        Console.WriteLine("Session playtime: " + Math.Abs((int)timeDiff.TotalSeconds) / 3600.0 + " hours");
 
-                        
-                        var dateStringElements = dateString2.Split('-');
-                       
-                        DateTime fileDate = DateTime.ParseExact($"{dateStringElements[0]}-{dateStringElements[1]}-{dateStringElements[2]}", 
-                            "yyyy-MM-dd", CultureInfo.InvariantCulture);
-
-                        DateTime newDateTime = new DateTime(fileDate.Year, fileDate.Month, fileDate.Day,
-                                                            serverLeaveTime.Hour, serverLeaveTime.Minute, serverLeaveTime.Second);
-                        serverLeaveTime = newDateTime;
-
-
+                        timesLeft++;
                     }
-                    Console.WriteLine("left server and quit client at " + serverLeaveTime);
-
-                    TimeSpan timeDiff = serverLeaveTime - serverJoinTime;
-                    seconds += Math.Abs((int)timeDiff.TotalSeconds);
-
-                    timesLeft++;
+                    
+                }
+                
+           
+                catch (Exception e)
+                {
+                    Console.WriteLine($"ERROR scanning file {filePath}: {e.Message}");
+                    errors += 1;
                 }
             }
 
             int hours = seconds / 3600;
+            Console.WriteLine($"Finished scan with {errors} errors.");
+            Console.WriteLine("\n\n\n\n\n");
             Console.WriteLine("Total hours spent on the server: " + hours);
             Console.WriteLine($"Times joined: {timesJoined}");
             Console.WriteLine($"Times left: {timesLeft}");

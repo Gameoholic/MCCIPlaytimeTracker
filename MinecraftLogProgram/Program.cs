@@ -197,7 +197,7 @@ namespace MinecraftLogProgram
             int hours = seconds / 3600;
             Console.WriteLine($"Finished scan with {errors} errors.");
             Console.WriteLine("\n\n\n\n\n");
-            Console.WriteLine("Total hours spent on the server: " + hours);
+            Console.WriteLine("Total hours spent on MCC Island: " + hours);
             Console.WriteLine($"Times joined: {timesJoined}");
             Console.WriteLine($"Times left: {timesLeft}");
 
